@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Coûts IA{% endblock %}
+{% block content %}
+<h1>Coûts IA</h1>
+<p class="muted">Chaque appel au modèle écrit une ligne ici. Les totaux sont des sommes sur ces lignes, pas des estimations.</p>
+<section class="tiles">
+  <div class="tile"><span class="n">{{ totals[0] }}</span><span class="l">Appels</span></div>
+  <div class="tile"><span class="n">{{ "{:,}".format(totals[1]).replace(",", " ") }}</span><span class="l">Jetons en entrée</span></div>
+  <div class="tile"><span class="n">{{ "{:,}".format(totals[2]).replace(",", " ") }}</span><span class="l">Jetons en sortie</span></div>
+  <div class="tile accent"><span class="n">{{ totals[3]|usd }}</span><span class="l">Coût total</span></div>
+  <div class="tile"><span class="n">{% if tickets_done %}{{ (totals[3] // tickets_done)|usd }}{% else %}—{% endif %}</span><span class="l">Coût moyen par ticket</span></div>
+</section>
+<section class="card">
+  <table class="list plainrows">
+    <thead><tr><th>Heure</th><th>Ticket</th><th>Usage</th><th>Modèle</th><th class="r">Entrée</th><th class="r">Sortie</th><th class="r">Coût</th><th class="r">Durée</th><th>État</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="muted">{{ r.at|paris("%d/%m %H:%M:%S") }}</td>
+        <td><a href="/tickets/{{ r.ticket_id }}">#{{ r.ticket_id }}</a></td>
+        <td>{{ r.purpose }}</td>
+        <td class="mono">{{ r.model }}</td>
+        <td class="r mono">{{ r.input_tokens }}</td>
+        <td class="r mono">{{ r.output_tokens }}</td>
+        <td class="r mono">{{ r.cost_micro_usd|usd }}</td>
+        <td class="r mono">{{ r.latency_ms }} ms</td>
+        <td>{% if r.ok %}<span class="badge resolved">ok</span>{% else %}<span class="badge failed" title="{{ r.error }}">erreur</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9" class="muted">Aucun appel enregistré.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

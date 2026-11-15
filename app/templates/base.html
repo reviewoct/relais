@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Relais{% endblock %} — Relais</title>
+  <link rel="stylesheet" href="/static/style.css">
+  {% if busy %}
+  <script>
+    // Refresh while the agent works, unless someone is typing in a form.
+    setInterval(() => {
+      const typing = document.activeElement.closest("form") || document.getElementById("f_body")?.value;
+      if (!typing) location.reload();
+    }, 2000);
+  </script>
+  {% endif %}
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/"><span class="mark">R</span> Relais</a>
+    <nav>
+      <a href="/" {% if request.url.path == "/" %}class="on"{% endif %}>Boîte de réception</a>
+      <a href="/couts" {% if request.url.path == "/couts" %}class="on"{% endif %}>Coûts IA</a>
+      <a href="/docs">API</a>
+    </nav>
+    <span class="who">{{ user }}</span>
+  </header>
+  {% if ai_mode == "demo" %}
+  <div class="banner">
+    <strong>Mode démo.</strong> Aucun modèle n'est appelé : l'agent suit un script par mots-clés.
+    Les outils, les contrôles et la validation humaine sont les vrais. Ajoutez
+    <code>ANTHROPIC_API_KEY</code> pour utiliser Claude.
+  </div>
+  {% endif %}
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>

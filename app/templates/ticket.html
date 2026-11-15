@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Ticket {{ t.id }}{% endblock %}
+{% block content %}
+<p class="crumb"><a href="/">← Boîte de réception</a></p>
+<div class="head">
+  <h1>{{ t.subject }}</h1>
+  <span class="badge {{ t.status }}">{{ STATUS_LABELS[t.status] }}</span>
+</div>
+
+{% if error %}
+<div class="alert">Une action a échoué côté ERP. Rien n'a été envoyé au client. Corrigez puis validez à nouveau : une action déjà exécutée ne sera pas rejouée.</div>
+{% endif %}
+
+<div class="cols">
+  <div class="grow">
+    <section class="card">
+      <h2>Message du client</h2>
+      <p class="meta"><strong>{{ t.from_name or "—" }}</strong> &lt;{{ t.from_email }}&gt; · {{ t.created_at|paris }}</p>
+      <pre class="mail">{{ t.body }}</pre>
+      {% if t.category %}
+      <dl class="facts">
+        <div><dt>Catégorie</dt><dd>{{ t.category }}</dd></div>
+        <div><dt>Urgence</dt><dd><span class="urg {{ t.urgency }}">{{ t.urgency }}</span></dd></div>
+        <div><dt>Ton</dt><dd>{{ t.sentiment }}</dd></div>
+        <div><dt>Langue</dt><dd>{{ t.language }}</dd></div>
+      </dl>
+      <p class="muted small">{{ t.summary }}</p>
+      {% endif %}
+    </section>
+
+    {% if busy %}
+    <section class="card"><p class="working"><span class="spin"></span> L'agent travaille sur ce ticket…</p></section>
+    {% endif %}
+
+    {% if t.status == "awaiting_approval" %}
+    <section class="card review">
+      <h2>Validation</h2>
+      {% if t.internal_summary %}
+      <p class="reviewer-note"><strong>Note de l'agent pour le relecteur</strong> (confiance {{ t.confidence }} %) : {{ t.internal_summary }}</p>
+      {% endif %}
+      <form method="post" action="/tickets/{{ t.id }}/approve" class="stack">
+        {% set open_actions = t.actions|selectattr("status", "in", ["pending", "failed"])|list %}
+        {% if open_actions %}
+        <fieldset>
+          <legend>Actions proposées — décochez pour refuser</legend>
+          {% for a in open_actions %}
+          <label class="action">
+            <input type="checkbox" name="action_ids" value="{{ a.id }}" checked>
+            <span>
+              {% if a.kind == "refund" %}
+                <strong>Rembourser {{ a.payload.amount_cents|euros }}</strong> sur la commande {{ a.payload.order_ref }}
+              {% else %}
+                <strong>Transmettre à l'équipe {{ a.payload.team }}</strong>
+              {% endif %}
+              <em>{{ a.payload.reason }}</em>
+              {% if a.status == "failed" %}<span class="badge failed">Échec précédent : {{ a.result.error }}</span>{% endif %}
+            </span>
+          </label>
+          {% endfor %}
+        </fieldset>
+        {% endif %}
+        <label>Réponse au client — modifiable avant envoi
+          <textarea name="body" rows="14" required>{{ t.draft_body }}</textarea>
+        </label>
+        <button class="primary">Valider et envoyer</button>
+      </form>
+      <form method="post" action="/tickets/{{ t.id }}/reject" class="inline">
+        <input name="reason" placeholder="Motif du refus (facultatif)">
+        <button class="ghost">Refuser et reprendre à la main</button>
+      </form>
+    </section>
+    {% endif %}
+
+    {% if outbox %}
+    <section class="card">
+      <h2>Réponse envoyée</h2>
+      <p class="meta">À {{ outbox.to_email }} · {{ outbox.subject }} · validée par {{ t.handled_by }} le {{ t.resolved_at|paris }}</p>
+      <pre class="mail">{{ outbox.body }}</pre>
+      <p class="muted small">Envoi simulé : le message est enregistré dans la boîte d'envoi, aucun e-mail réel ne part.</p>
+    </section>
+    {% endif %}
+
+    {% set closed = t.actions|rejectattr("status", "in", ["pending", "failed"])|list %}
+    {% if closed %}
+    <section class="card">
+      <h2>Actions</h2>
+      <ul class="plain">
+      {% for a in closed %}
+        <li><span class="badge {{ a.status }}">{{ ACTION_LABELS[a.status] }}</span>
+          {% if a.kind == "refund" %}Remboursement de {{ a.payload.amount_cents|euros }} — {{ a.payload.order_ref }}
+          {% else %}Escalade vers {{ a.payload.team }}{% endif %}
+          <span class="muted">· {{ a.decided_by }}, {{ a.decided_at|paris }}</span></li>
+      {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if t.status in ["failed", "manual"] %}
+    <section class="card">
+      {% if t.reject_reason %}<p>Motif du refus : {{ t.reject_reason }}</p>{% endif %}
+      <form method="post" action="/tickets/{{ t.id }}/retry"><button class="ghost">Relancer l'agent sur ce ticket</button></form>
+    </section>
+    {% endif %}
+  </div>
+
+  <section class="card side wide">
+    <h2>Journal</h2>
+    <p class="muted small">{{ calls }} appel(s) au modèle · {{ cost|usd }}</p>
+    <ol class="timeline">
+      {% for e in t.events %}
+      <li class="ev {{ e.kind }}">
+        <span class="when">{{ e.at|paris("%H:%M:%S") }}</span>
+        <span class="actor">{{ e.actor }}</span>
+        {% if e.kind in ["tool_call", "tool_error"] %}
+          <details>
+            <summary><code>{{ e.title }}</code>{% if e.kind == "tool_error" %} <span class="badge failed">refusé</span>{% endif %}</summary>
+            <pre>{{ e.detail|pretty }}</pre>
+          </details>
+        {% else %}
+          <span class="what">{{ e.title }}</span>
+          {% if e.detail and e.kind in ["error", "retry", "action_failed"] %}<pre>{{ e.detail|pretty }}</pre>{% endif %}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+</div>
+{% endblock %}

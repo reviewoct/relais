@@ -1,0 +1,47 @@
+# Three services: the API, a separate worker, and PostgreSQL.
+#   docker compose up --build        then open http://localhost:8200
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: relais
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-relais-dev}
+      POSTGRES_DB: relais
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relais"]
+      interval: 3s
+      retries: 20
+
+  api:
+    build: .
+    environment: &env
+      DATABASE_URL: postgresql+psycopg://relais:${POSTGRES_PASSWORD:-relais-dev}@db:5432/relais
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MODE: ${AI_MODE:-auto}
+      ERP_BASE_URL: http://api:8200/mock-erp
+      ERP_TOKEN: ${ERP_TOKEN:-dev-erp-token}
+      INBOUND_API_KEY: ${INBOUND_API_KEY:-}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}
+      WORKER_INLINE: "false"
+    ports:
+      - "8200:8200"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8200/health')"]
+      interval: 5s
+      retries: 10
+
+  worker:
+    build: .
+    command: ["python", "-m", "app.worker"]
+    environment: *env
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:

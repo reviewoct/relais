@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Boîte de réception{% endblock %}
+{% block content %}
+<section class="tiles">
+  <div class="tile accent"><span class="n">{{ counts.get("awaiting_approval", 0) }}</span><span class="l">À valider</span></div>
+  <div class="tile"><span class="n">{{ counts.get("new", 0) + counts.get("processing", 0) }}</span><span class="l">En cours de traitement</span></div>
+  <div class="tile"><span class="n">{{ counts.get("resolved", 0) }}</span><span class="l">Résolus</span></div>
+  <div class="tile"><span class="n">{{ counts.get("manual", 0) + counts.get("failed", 0) }}</span><span class="l">Repris par un humain</span></div>
+  <div class="tile"><span class="n">{{ spend|usd }}</span><span class="l">Dépense IA totale</span></div>
+</section>
+
+<div class="cols">
+  <section class="card grow">
+    <h2>Tickets</h2>
+    {% if tickets %}
+    <table class="list">
+      <thead><tr><th>#</th><th>Client</th><th>Objet</th><th>Catégorie</th><th>Urgence</th><th>Statut</th><th>Reçu</th></tr></thead>
+      <tbody>
+      {% for t in tickets %}
+        <tr onclick="location.href='/tickets/{{ t.id }}'">
+          <td class="mono">{{ t.id }}</td>
+          <td>{{ t.from_name or t.from_email }}</td>
+          <td><a href="/tickets/{{ t.id }}">{{ t.subject }}</a></td>
+          <td>{{ t.category or "—" }}</td>
+          <td>{% if t.urgency %}<span class="urg {{ t.urgency }}">{{ t.urgency }}</span>{% else %}—{% endif %}</td>
+          <td><span class="badge {{ t.status }}">{{ STATUS_LABELS[t.status] }}</span></td>
+          <td class="muted">{{ t.created_at|paris("%d/%m %H:%M") }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Aucun ticket pour l'instant. Simulez un e-mail entrant à droite.</p>
+    {% endif %}
+  </section>
+
+  <section class="card side">
+    <h2>Simuler un e-mail entrant</h2>
+    <p class="muted small">En production, les e-mails arrivent par le webhook <code>POST /api/inbound</code>.</p>
+    <form method="post" action="/simulate" class="stack">
+      <label>Scénario
+        <select id="preset">
+          <option value="">— message libre —</option>
+          {% for s in samples %}<option value="{{ loop.index0 }}">{{ s.label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Nom <input name="from_name" id="f_name"></label>
+      <label>E-mail <input name="from_email" id="f_email" type="email" required></label>
+      <label>Objet <input name="subject" id="f_subject" required></label>
+      <label>Message <textarea name="body" id="f_body" rows="7" required></textarea></label>
+      <button class="primary">Envoyer à l'agent</button>
+    </form>
+  </section>
+</div>
+<script>
+  const samples = {{ samples|tojson }};
+  document.getElementById("preset").addEventListener("change", (e) => {
+    const s = samples[e.target.value];
+    if (!s) return;
+    f_name.value = s.from_name; f_email.value = s.from_email;
+    f_subject.value = s.subject; f_body.value = s.body;
+  });
+</script>
+{% endblock %}
